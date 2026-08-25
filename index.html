@@ -6,6 +6,12 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Zikir Matik</title>
 <style>
   :root{
@@ -105,6 +111,34 @@
 
   footer{margin-top:auto;padding-top:18px;font-size:.7rem;opacity:.5;text-align:center}
 
+  /* Gunluk hedef */
+  .daily-goal{width:100%;max-width:420px;margin-top:14px}
+  .daily-goal .dg-head{display:flex;justify-content:space-between;align-items:center;font-size:.82rem;opacity:.9;margin-bottom:6px}
+  .daily-goal input{width:64px;padding:5px 6px;border-radius:8px;border:1px solid var(--accent);background:rgba(0,0,0,.25);color:var(--cream);text-align:center}
+  .bar{height:14px;border-radius:8px;background:rgba(255,255,255,.12);overflow:hidden}
+  .bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--gold));width:0;transition:width .3s}
+
+  /* Haftalik grafik */
+  .week{width:100%;max-width:420px;margin-top:16px}
+  .week-title{font-size:.82rem;opacity:.9;margin-bottom:8px;text-align:center}
+  .week-chart{display:flex;align-items:flex-end;justify-content:space-between;gap:6px;height:90px;padding:0 4px}
+  .wc-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+  .wc-bar{width:100%;max-width:34px;border-radius:6px 6px 0 0;background:linear-gradient(180deg,var(--gold),var(--accent));min-height:3px;transition:height .3s}
+  .wc-day{font-size:.62rem;opacity:.7;margin-top:4px}
+  .wc-val{font-size:.6rem;opacity:.85;margin-bottom:2px}
+
+  /* Paylasim karti */
+  .share-btn{margin-top:16px}
+  .share-overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;
+    align-items:center;justify-content:center;z-index:60;backdrop-filter:blur(3px);
+  }
+  .share-overlay.show{display:flex}
+  .share-box{background:#0f3d2e;border:2px solid var(--gold);border-radius:16px;padding:16px;text-align:center;max-width:92vw}
+  .share-box canvas{max-width:100%;border-radius:12px;display:block}
+  .share-box .sb-btns{display:flex;gap:10px;justify-content:center;margin-top:14px}
+
+
   .overlay{
     position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;
     align-items:center;justify-content:center;z-index:50;backdrop-filter:blur(2px);
@@ -170,9 +204,26 @@
     <button class="btn btn-undo" id="resetAllBtn">🗑 Tümünü Sıfırla</button>
   </div>
 
+  <div class="stats" id="stats"></div>
+
   <div class="total" id="totalText"></div>
 
-  <div class="stats" id="stats"></div>
+  <div class="daily-goal">
+    <div class="dg-head">
+      <span>Günlük Hedef</span>
+      <span><input type="number" id="dailyGoalInput" min="1" value="100"> zikir</span>
+    </div>
+    <div class="bar"><i id="dailyBar"></i></div>
+  </div>
+
+  <div class="week">
+    <div class="week-title">Son 7 Gün</div>
+    <div class="week-chart" id="weekChart"></div>
+  </div>
+
+  <button class="btn btn-sound share-btn" id="shareBtn">📤 Paylaşım Kartı Oluştur</button>
+
+  <div class="themes" id="themes"></div>
 
   <div class="reminder">
     <span>Günlük hatırlatma</span>
@@ -182,6 +233,18 @@
   </div>
 
   <div class="themes" id="themes"></div>
+
+  <!-- Paylasim karti -->
+  <div class="share-overlay" id="shareOverlay">
+    <div class="share-box">
+      <canvas id="shareCanvas" width="600" height="600"></canvas>
+      <div class="sb-btns">
+        <button class="btn btn-undo" id="shareCancel">Kapat</button>
+        <button class="btn btn-sound" id="shareDownload">💾 İndir</button>
+        <button class="btn btn-reset" id="shareNative">📤 Paylaş</button>
+      </div>
+    </div>
+  </div>
 
   <footer>Zikir Matik</footer>
 
@@ -260,6 +323,15 @@ const newArabic = document.getElementById('newArabic');
 const remSwitch = document.getElementById('remSwitch');
 const remHour = document.getElementById('remHour');
 const remMin = document.getElementById('remMin');
+const dailyGoalInput = document.getElementById('dailyGoalInput');
+const dailyBar = document.getElementById('dailyBar');
+const weekChart = document.getElementById('weekChart');
+const shareBtn = document.getElementById('shareBtn');
+const shareOverlay = document.getElementById('shareOverlay');
+const shareCanvas = document.getElementById('shareCanvas');
+const shareCancel = document.getElementById('shareCancel');
+const shareDownload = document.getElementById('shareDownload');
+const shareNative = document.getElementById('shareNative');
 
 let customZikirler = [];
 let current = 0;
@@ -270,6 +342,7 @@ let soundOn = true;
 let theme = 'yesil';
 let reminderOn = false;
 let remH = 9, remM = 0;
+let dailyGoal = 100;
 let lastGoalReached = {};
 let resetMode = 'none';
 
@@ -288,6 +361,7 @@ function load(){
     reminderOn = localStorage.getItem('zikirRem')==='true';
     remH = parseInt(localStorage.getItem('zikirRemH')||'9');
     remM = parseInt(localStorage.getItem('zikirRemM')||'0');
+    dailyGoal = parseInt(localStorage.getItem('zikirDailyGoal')||'100');
   }catch(e){}
   if(!goal||goal<1) goal=33;
   if(current>=allZikirler().length) current=0;
@@ -303,6 +377,7 @@ function save(){
   localStorage.setItem('zikirRem',reminderOn);
   localStorage.setItem('zikirRemH',remH);
   localStorage.setItem('zikirRemM',remM);
+  localStorage.setItem('zikirDailyGoal',dailyGoal);
 }
 
 function applyTheme(){
@@ -356,6 +431,32 @@ function render(){
   let last="";
   if(keys.length>1){ const lk=keys[1]; last=" · Dün: "+(daily[lk]||0); }
   stats.innerHTML="<b>Bugün:</b> "+today+" zikir"+last;
+  // gunluk hedef ilerleme
+  const pctDaily = dailyGoal>0 ? Math.min(today/dailyGoal,1) : 0;
+  dailyBar.style.width=(pctDaily*100)+"%";
+  // haftalik grafik
+  drawWeek();
+}
+
+function drawWeek(){
+  const days=["Pz","Pt","Sa","Ça","Pe","Cu","Ct"];
+  let max=1;
+  const data=[];
+  for(let i=6;i>=0;i--){
+    const d=new Date(); d.setDate(d.getDate()-i);
+    const k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,'0')+"-"+String(d.getDate()).padStart(2,'0');
+    const v=daily[k]||0;
+    if(v>max) max=v;
+    data.push({v,label:days[d.getDay()]});
+  }
+  weekChart.innerHTML='';
+  data.forEach(col=>{
+    const h = Math.round((col.v/max)*100);
+    const c=document.createElement('div');
+    c.className='wc-col';
+    c.innerHTML='<div class="wc-val">'+(col.v||'')+'</div><div class="wc-bar" style="height:'+h+'%"></div><div class="wc-day">'+col.label+'</div>';
+    weekChart.appendChild(c);
+  });
 }
 
 function updateRing(){
@@ -460,6 +561,60 @@ remSwitch.addEventListener('click',()=>{
 });
 remHour.addEventListener('change',()=>{ remH=parseInt(remHour.value)||0; if(remH<0)remH=0; if(remH>23)remH=23; save(); });
 remMin.addEventListener('change',()=>{ remM=parseInt(remMin.value)||0; if(remM<0)remM=0; if(remM>59)remM=59; save(); });
+dailyGoalInput.addEventListener('change',()=>{ dailyGoal=parseInt(dailyGoalInput.value)||100; if(dailyGoal<1)dailyGoal=1; render(); save(); });
+
+// Paylasim karti
+function buildShareCard(){
+  const ctx=shareCanvas.getContext('2d');
+  const W=600,H=600;
+  // arka plan gradyan (temaya gore)
+  const t=THEMES[theme]||THEMES.yesil;
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,t.bg2); g.addColorStop(1,t.bg1);
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  // cerceve
+  ctx.strokeStyle=t.gold; ctx.lineWidth=6; ctx.strokeRect(24,24,W-48,H-48);
+  // baslik
+  ctx.fillStyle=t.goldSoft; ctx.textAlign='center';
+  ctx.font='bold 46px Segoe UI, Tahoma, sans-serif';
+  ctx.fillText('🕌 Zikir Matik', W/2, 110);
+  // bugunku toplam
+  const tk=todayKey();
+  const today=daily[tk]||0;
+  let total=0; Object.values(counts).forEach(v=>total+=v);
+  ctx.fillStyle=t.cream; ctx.font='28px Segoe UI, Tahoma, sans-serif';
+  ctx.fillText('Bugün', W/2, 230);
+  ctx.fillStyle=t.gold; ctx.font='bold 120px Segoe UI, Tahoma, sans-serif';
+  ctx.fillText(String(today), W/2, 350);
+  ctx.fillStyle=t.cream; ctx.font='24px Segoe UI, Tahoma, sans-serif';
+  ctx.fillText('zikir çektim', W/2, 390);
+  // secili zikir
+  const z=allZikirler()[current];
+  ctx.fillStyle=t.goldSoft; ctx.font='22px Segoe UI, Tahoma, sans-serif';
+  ctx.fillText('Bu zikir: '+(counts[z.key]||0)+' · Toplam: '+total, W/2, 470);
+  // tarih
+  ctx.fillStyle=t.cream; ctx.font='18px Segoe UI, Tahoma, sans-serif';
+  const dt=new Date();
+  ctx.fillText(dt.toLocaleDateString('tr-TR'), W/2, 540);
+}
+shareBtn.addEventListener('click',()=>{ buildShareCard(); shareOverlay.classList.add('show'); });
+shareCancel.addEventListener('click',()=>shareOverlay.classList.remove('show'));
+shareDownload.addEventListener('click',()=>{
+  const a=document.createElement('a');
+  a.download='zikir-karti.png';
+  a.href=shareCanvas.toDataURL('image/png');
+  a.click();
+});
+shareNative.addEventListener('click',async()=>{
+  if(!navigator.canShare||!navigator.canShare({files:[]})){
+    shareDownload.click(); return;
+  }
+  try{
+    const blob=await new Promise(r=>shareCanvas.toBlob(r,'image/png'));
+    const file=new File([blob],'zikir-karti.png',{type:'image/png'});
+    await navigator.share({files:[file],title:'Zikir Matik',text:'Bugün zikir çektim 🕌'});
+  }catch(e){}
+});
 
 function checkReminder(){
   if(!reminderOn) return;
@@ -482,8 +637,16 @@ buildThemes();
 buildSelect();
 remSwitch.classList.toggle('on',reminderOn);
 remHour.value=remH; remMin.value=remM;
+dailyGoalInput.value=dailyGoal;
 render();
 checkReminder();
+
+// PWA service worker kaydi
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
 </script>
 </body>
 </html>

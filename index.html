@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Zikir Matik</title>
 <style>
   :root{
@@ -89,12 +92,10 @@
   .stats{width:100%;max-width:420px;margin-top:14px;font-size:.8rem;opacity:.85;text-align:center;line-height:1.7}
   .stats b{color:var(--gold-soft)}
 
-  /* tema seçici */
   .themes{display:flex;gap:10px;justify-content:center;margin-top:16px}
   .theme-dot{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid rgba(255,255,255,.3)}
   .theme-dot.active{border-color:#fff;transform:scale(1.15)}
 
-  /* ayar satırı */
   .reminder{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:.82rem;opacity:.9}
   .reminder input{width:54px;padding:5px 6px;border-radius:8px;border:1px solid var(--accent);background:rgba(0,0,0,.25);color:var(--cream);text-align:center}
   .switch{position:relative;width:44px;height:24px;background:rgba(255,255,255,.2);border-radius:20px;cursor:pointer;transition:background .2s}
@@ -104,7 +105,6 @@
 
   footer{margin-top:auto;padding-top:18px;font-size:.7rem;opacity:.5;text-align:center}
 
-  /* overlay modal (sıfırla + ekle) */
   .overlay{
     position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;
     align-items:center;justify-content:center;z-index:50;backdrop-filter:blur(2px);
@@ -163,8 +163,11 @@
 
   <div class="controls">
     <button class="btn btn-undo" id="undoBtn">↩ Geri Al</button>
-    <button class="btn btn-reset" id="resetBtn">🔄 Sıfırla</button>
+    <button class="btn btn-reset" id="resetBtn">🔄 Bu Zikri Sıfırla</button>
     <button class="btn btn-sound" id="soundBtn">🔊 Ses</button>
+  </div>
+  <div class="controls" style="margin-top:12px">
+    <button class="btn btn-undo" id="resetAllBtn">🗑 Tümünü Sıfırla</button>
   </div>
 
   <div class="total" id="totalText"></div>
@@ -240,10 +243,13 @@ const totalText = document.getElementById('totalText');
 const stats = document.getElementById('stats');
 const undoBtn = document.getElementById('undoBtn');
 const resetBtn = document.getElementById('resetBtn');
+const resetAllBtn = document.getElementById('resetAllBtn');
 const soundBtn = document.getElementById('soundBtn');
 const themesBox = document.getElementById('themes');
 const addBtn = document.getElementById('addBtn');
 const overlay = document.getElementById('overlay');
+const modalTitle = document.getElementById('modalTitle');
+const modalText = document.getElementById('modalText');
 const modalCancel = document.getElementById('modalCancel');
 const modalOk = document.getElementById('modalOk');
 const addOverlay = document.getElementById('addOverlay');
@@ -258,13 +264,14 @@ const remMin = document.getElementById('remMin');
 let customZikirler = [];
 let current = 0;
 let counts = {};
-let daily = {};        // { "2026-08-24": toplam }
+let daily = {};
 let goal = 33;
 let soundOn = true;
 let theme = 'yesil';
 let reminderOn = false;
 let remH = 9, remM = 0;
 let lastGoalReached = {};
+let resetMode = 'none';
 
 function allZikirler(){ return DEFAULT_ZIKIRLER.concat(customZikirler); }
 function todayKey(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,'0')+"-"+String(d.getDate()).padStart(2,'0'); }
@@ -343,7 +350,6 @@ function render(){
   else if(goal>0) goalInfo.textContent="("+(goal-c)+" kaldı)";
   else goalInfo.textContent="";
   soundBtn.textContent = soundOn ? "🔊 Ses" : "🔇 Ses";
-  // günlük istatistik
   const tk=todayKey();
   const today=daily[tk]||0;
   const keys=Object.keys(daily).sort().reverse();
@@ -400,20 +406,35 @@ undoBtn.addEventListener('click',()=>{
 resetBtn.addEventListener('click',()=>{
   const z=allZikirler()[current];
   if((counts[z.key]||0)===0) return;
+  resetMode='this';
+  modalTitle.textContent="Bu zikri sıfırla?";
+  modalText.textContent="\""+z.tr+"\" sayacı silinecek. Diğer zikirler etkilenmez.";
   overlay.classList.add('show');
 });
-modalCancel.addEventListener('click',()=>overlay.classList.remove('show'));
+resetAllBtn.addEventListener('click',()=>{
+  let any=0; Object.values(counts).forEach(v=>any+=v);
+  if(any===0) return;
+  resetMode='all';
+  modalTitle.textContent="Tümünü sıfırla?";
+  modalText.textContent="Bütün zikirlerin sayaçları sıfırlanacak. Bu işlem geri alınamaz.";
+  overlay.classList.add('show');
+});
+modalCancel.addEventListener('click',()=>{ overlay.classList.remove('show'); resetMode='none'; });
 modalOk.addEventListener('click',()=>{
-  const z=allZikirler()[current];
-  counts[z.key]=0; lastGoalReached[z.key]=false;
-  overlay.classList.remove('show'); render(); save();
+  if(resetMode==='all'){
+    Object.keys(counts).forEach(k=>counts[k]=0);
+  } else if(resetMode==='this'){
+    const z=allZikirler()[current];
+    counts[z.key]=0;
+  }
+  lastGoalReached={};
+  overlay.classList.remove('show'); resetMode='none'; render(); save();
 });
 
 select.addEventListener('change',()=>{ current=parseInt(select.value); lastGoalReached={}; render(); save(); });
 goalInput.addEventListener('change',()=>{ goal=parseInt(goalInput.value)||33; if(goal<1)goal=1; render(); save(); });
 soundBtn.addEventListener('click',()=>{ soundOn=!soundOn; render(); save(); });
 
-// yeni zikir
 addBtn.addEventListener('click',()=>{ newLatin.value=''; newArabic.value=''; addOverlay.classList.add('show'); newLatin.focus(); });
 addCancel.addEventListener('click',()=>addOverlay.classList.remove('show'));
 addOk.addEventListener('click',()=>{
@@ -429,7 +450,6 @@ addOk.addEventListener('click',()=>{
   lastGoalReached={}; render(); save();
 });
 
-// hatırlatma
 remSwitch.addEventListener('click',()=>{
   reminderOn=!reminderOn;
   remSwitch.classList.toggle('on',reminderOn);
